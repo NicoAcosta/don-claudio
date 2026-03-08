@@ -1,0 +1,5 @@
+{
+  "name": "prosegur",
+  "private": true,
+  "workspaces": ["packages/*"]
+}

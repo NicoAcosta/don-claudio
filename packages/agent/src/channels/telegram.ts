@@ -1,6 +1,9 @@
-import { Bot } from 'grammy';
+import fs from 'fs';
+import path from 'path';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { Bot, InputFile } from 'grammy';
+
+import { ASSISTANT_NAME, TRIGGER_PATTERN, GROUPS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
@@ -101,6 +104,7 @@ export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  onRegisterGroup: (jid: string, group: RegisteredGroup) => void;
 }
 
 export class TelegramChannel implements Channel {
@@ -153,12 +157,12 @@ export class TelegramChannel implements Channel {
       const sender = ctx.from?.id.toString() || '';
       const msgId = ctx.message.message_id.toString();
 
-      // Don Claudio middleware: rate limit
-      const rateResult = checkRateLimit(sender);
-      if (!rateResult.allowed) {
-        ctx.reply(rateResult.reply!);
-        return;
-      }
+      // Don Claudio middleware: rate limit (disabled for testing)
+      // const rateResult = checkRateLimit(sender);
+      // if (!rateResult.allowed) {
+      //   ctx.reply(rateResult.reply!);
+      //   return;
+      // }
 
       // Don Claudio middleware: sanitize input
       const sanitizeResult = sanitizeInput(content);
@@ -198,14 +202,42 @@ export class TelegramChannel implements Channel {
       const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
       this.opts.onChatMetadata(chatJid, timestamp, chatName, 'telegram', isGroup);
 
-      // Only deliver full message for registered groups
-      const group = this.opts.registeredGroups()[chatJid];
+      // Auto-register private chats (Don Claudio responds to anyone who DMs)
+      let group = this.opts.registeredGroups()[chatJid];
       if (!group) {
-        logger.debug(
-          { chatJid, chatName },
-          'Message from unregistered Telegram chat',
-        );
-        return;
+        if (ctx.chat.type === 'private') {
+          // Each user gets a unique folder so they have isolated IPC and sessions.
+          // The CLAUDE.md is symlinked from the don-claudio template folder.
+          const userId = ctx.from?.id?.toString() || ctx.chat.id.toString();
+          const userFolder = `dc-${userId}`;
+          const userFolderPath = path.join(GROUPS_DIR, userFolder);
+          const templateClaudeMd = path.join(GROUPS_DIR, 'don-claudio', 'CLAUDE.md');
+
+          if (!fs.existsSync(userFolderPath)) {
+            fs.mkdirSync(path.join(userFolderPath, 'logs'), { recursive: true });
+            // Symlink CLAUDE.md from template so all users share the same personality
+            if (fs.existsSync(templateClaudeMd)) {
+              fs.symlinkSync(templateClaudeMd, path.join(userFolderPath, 'CLAUDE.md'));
+            }
+          }
+
+          const newGroup: RegisteredGroup = {
+            name: chatName,
+            folder: userFolder,
+            trigger: `@${ASSISTANT_NAME}`,
+            added_at: new Date().toISOString(),
+            requiresTrigger: false,
+          };
+          this.opts.onRegisterGroup(chatJid, newGroup);
+          group = newGroup;
+          logger.info({ chatJid, chatName, folder: userFolder }, 'Auto-registered private Telegram chat');
+        } else {
+          logger.debug(
+            { chatJid, chatName },
+            'Message from unregistered Telegram group',
+          );
+          return;
+        }
       }
 
       // Deliver message — startMessageLoop() will pick it up
@@ -273,6 +305,20 @@ export class TelegramChannel implements Channel {
     this.bot.catch((err) => {
       logger.error({ err: err.message }, 'Telegram bot error');
     });
+
+    // Set bot profile photo if avatar file exists
+    const avatarPath = path.join(GROUPS_DIR, 'don-claudio', 'avatar.png');
+    if (fs.existsSync(avatarPath)) {
+      try {
+        await this.bot.api.setMyProfilePhoto({
+          type: 'static',
+          photo: new InputFile(avatarPath),
+        });
+        logger.info('Bot profile photo set');
+      } catch (err) {
+        logger.debug({ err }, 'Could not set bot profile photo (may already be set)');
+      }
+    }
 
     // Start polling — returns a Promise that resolves when started
     return new Promise<void>((resolve) => {

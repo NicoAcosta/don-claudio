@@ -1,10 +1,10 @@
 {
-  "name": "@prosegur/agent",
+  "name": "@don-claudio/agent",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "dependencies": {
     "viem": "^2.0.0",
-    "@prosegur/shared": "workspace:*"
+    "@don-claudio/shared": "workspace:*"
   }
 }

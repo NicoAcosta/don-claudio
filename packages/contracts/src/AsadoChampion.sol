@@ -26,7 +26,7 @@ contract AsadoChampion is ERC721, Ownable {
     constructor() ERC721("Asado Champion", "ASADO") Ownable(msg.sender) {}
 
     /// @notice Mint a trophy NFT to a winner.
-    /// @param to The address that conquered El Asador.
+    /// @param to The address that conquered Don Claudio.
     /// @return tokenId The minted token ID.
     function mint(address to) external onlyOwner returns (uint256 tokenId) {
         if (locked) revert Locked();
@@ -57,7 +57,7 @@ contract AsadoChampion is ERC721, Ownable {
             '{"name":"Asado Champion #',
             tokenIdStr,
             '",',
-            '"description":"Trophy for conquering El Asador at the Crecimiento prompt injection CTF.",',
+            '"description":"Trophy for conquering Don Claudio at the Crecimiento prompt injection CTF.",',
             '"image":"data:image/svg+xml;base64,',
             Base64.encode(bytes(svg)),
             '",',

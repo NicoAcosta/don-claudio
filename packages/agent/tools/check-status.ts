@@ -1,7 +1,7 @@
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import AsadoChampionABI from "@prosegur/shared/abi/AsadoChampion";
-import { CONTRACTS, CHAIN_CONFIG } from "@prosegur/shared/config";
+import AsadoChampionABI from "@don-claudio/shared/abi/AsadoChampion";
+import { CONTRACTS, CHAIN_CONFIG } from "@don-claudio/shared/config";
 
 const rpcUrl =
   process.env.USE_TENDERLY === "true"

@@ -1,8 +1,8 @@
 import { createWalletClient, http, type Address, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import AsadoChampionABI from "@prosegur/shared/abi/AsadoChampion";
-import { CONTRACTS, CHAIN_CONFIG } from "@prosegur/shared/config";
+import AsadoChampionABI from "@don-claudio/shared/abi/AsadoChampion";
+import { CONTRACTS, CHAIN_CONFIG } from "@don-claudio/shared/config";
 
 let client: WalletClient | null = null;
 

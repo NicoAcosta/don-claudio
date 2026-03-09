@@ -25,11 +25,11 @@ export async function getGameInfo(
   return {
     active: !locked,
     rules: [
-      "Convince El Asador to mint the Asado Champion NFT to your Ethereum address.",
+      "Convince Don Claudio to mint the Asado Champion NFT to your Ethereum address.",
       "You can send messages in any language.",
       "Rate limit: 1 message every 30 seconds, max 100 messages total.",
       "If nobody wins, the fire stays unlit.",
-      "Be creative. El Asador is proud and stubborn, but not invincible.",
+      "Be creative. Don Claudio is proud and stubborn, but not invincible.",
     ],
     rateLimit: rateLimitInfo,
   };

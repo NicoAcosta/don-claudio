@@ -15,7 +15,7 @@ Prompt injection CTF game for Crecimiento's invite-only asado. Attendees try to 
 | Package | Build | Test |
 |---------|-------|------|
 | contracts | `forge build` | `forge test` |
-| agent | `bun install` | `bun test` |
+| agent | `bun run build && ./container/build.sh` | `bun test` |
 
 ## Deployed Contracts
 

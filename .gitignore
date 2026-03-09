@@ -5,3 +5,12 @@ node_modules/
 out/
 cache/
 broadcast/
+.vscode/
+
+# NanoClaw local data (packages/agent)
+packages/agent/store/
+packages/agent/data/
+packages/agent/logs/
+packages/agent/.nanoclaw/
+packages/agent/dist/
+packages/agent/node_modules/

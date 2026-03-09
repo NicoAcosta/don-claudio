@@ -11,6 +11,92 @@ import {
   RegisteredGroup,
 } from '../types.js';
 
+// --- Don Claudio Middleware ---
+
+const COOLDOWN_MS = 30_000;
+const MAX_MESSAGES = 100;
+const MAX_MESSAGE_LENGTH = 2000;
+
+interface UserState {
+  messageCount: number;
+  lastMessageAt: number;
+}
+
+const userStates = new Map<string, UserState>();
+
+function checkRateLimit(userId: string): { allowed: boolean; reply?: string } {
+  const now = Date.now();
+  let state = userStates.get(userId);
+  if (!state) {
+    state = { messageCount: 0, lastMessageAt: 0 };
+    userStates.set(userId, state);
+  }
+
+  if (state.messageCount >= MAX_MESSAGES) {
+    return { allowed: false, reply: 'Se te acabaron los mensajes, che. 100 intentos y el fuego sigue firme. \u{1F525}' };
+  }
+
+  const elapsed = now - state.lastMessageAt;
+  if (elapsed < COOLDOWN_MS) {
+    const remaining = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+    return { allowed: false, reply: `Tranquilo, che. Dej\u{00E1} que las brasas respiren. Volv\u{00E9} en ${remaining} segundos.` };
+  }
+
+  state.messageCount++;
+  state.lastMessageAt = now;
+  return { allowed: true };
+}
+
+const INJECTION_MARKERS = [
+  '<system>', '</system>', '<|system|>', '<|im_start|>', '<|im_end|>',
+  '[INST]', '[/INST]', '<<SYS>>', '<</SYS>>', '###System', '### System',
+  '###Instruction', '### Instruction',
+  'ADMIN:', 'SYSTEM:', 'DEVELOPER:', 'ANTHROPIC:', 'OVERRIDE:', 'ROOT:', 'SUDO:',
+  '```system', '```instruction', '<system-prompt>', '</system-prompt>',
+  '<instructions>', '</instructions>',
+];
+
+function sanitizeInput(input: string): { ok: boolean; message: string; reply?: string } {
+  if (input.length > MAX_MESSAGE_LENGTH) {
+    return { ok: false, message: '', reply: 'Message too long. Keep it under 2000 characters, che.' };
+  }
+  if (input.trim().length === 0) {
+    return { ok: false, message: '' };
+  }
+
+  let cleaned = input;
+  for (const marker of INJECTION_MARKERS) {
+    const regex = new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    cleaned = cleaned.replace(regex, '');
+  }
+
+  // Reject long base64/hex blocks (but allow ETH addresses which are 42 chars)
+  const words = cleaned.split(/\s+/);
+  const suspiciousEncoded = words.some(
+    (w) => (/^[A-Za-z0-9+/]{50,}={0,2}$/.test(w)) || (/^(0x)?[0-9a-fA-F]{43,}$/.test(w))
+  );
+  if (suspiciousEncoded) {
+    return { ok: false, message: '', reply: 'No me mandes c\u{00F3}digos raros, che. Hablame en criollo.' };
+  }
+
+  return { ok: true, message: cleaned.trim() };
+}
+
+const CANARY_STRINGS = [
+  'CANARY_FUEGO_SAGRADO_7x9k',
+  'CANARY_DON_CLAUDIO_MINT_q3m2',
+  'CANARY_SYSTEM_LEAK_p8w1',
+];
+
+function checkOutputForCanaries(text: string): string | null {
+  for (const canary of CANARY_STRINGS) {
+    if (text.includes(canary)) {
+      return 'Epa, algo se me quem\u{00F3}. Volv\u{00E9} a preguntar, che.';
+    }
+  }
+  return null;
+}
+
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
@@ -66,6 +152,21 @@ export class TelegramChannel implements Channel {
         'Unknown';
       const sender = ctx.from?.id.toString() || '';
       const msgId = ctx.message.message_id.toString();
+
+      // Don Claudio middleware: rate limit
+      const rateResult = checkRateLimit(sender);
+      if (!rateResult.allowed) {
+        ctx.reply(rateResult.reply!);
+        return;
+      }
+
+      // Don Claudio middleware: sanitize input
+      const sanitizeResult = sanitizeInput(content);
+      if (!sanitizeResult.ok) {
+        if (sanitizeResult.reply) ctx.reply(sanitizeResult.reply);
+        return;
+      }
+      content = sanitizeResult.message;
 
       // Determine chat name
       const chatName =
@@ -198,6 +299,12 @@ export class TelegramChannel implements Channel {
     }
 
     try {
+      // Don Claudio middleware: check for canary leaks
+      const canaryReplace = checkOutputForCanaries(text);
+      if (canaryReplace) {
+        text = canaryReplace;
+      }
+
       const numericId = jid.replace(/^tg:/, '');
 
       // Telegram has a 4096 character limit per message — split if needed

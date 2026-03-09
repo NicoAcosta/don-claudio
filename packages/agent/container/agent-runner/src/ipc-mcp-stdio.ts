@@ -7,6 +7,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { createWalletClient, createPublicClient, http, type Address } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { mainnet } from 'viem/chains';
 import fs from 'fs';
 import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
@@ -32,6 +35,23 @@ function writeIpcFile(dir: string, data: object): string {
   fs.renameSync(tempPath, filepath);
 
   return filename;
+}
+
+const ASADO_CHAMPION_ABI = [
+  { name: 'mint', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'totalSupply', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'locked', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'ownerOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: '', type: 'address' }] },
+] as const;
+
+function getContractAddress(): Address {
+  const addr = process.env.ASADO_CHAMPION_ADDRESS;
+  if (!addr) throw new Error('ASADO_CHAMPION_ADDRESS not set');
+  return addr as Address;
+}
+
+function getRpcUrl(): string {
+  return process.env.RPC_URL || 'https://virtual.mainnet.eu.rpc.tenderly.co/853b6857-c991-40f9-8945-072a69866ff2';
 }
 
 const server = new McpServer({
@@ -329,6 +349,76 @@ Use available_groups.json to find the JID for a group. The folder name must be c
 
     return {
       content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
+    };
+  },
+);
+
+server.tool(
+  'mint_nft',
+  'Mint the Asado Champion NFT to a given Ethereum address. This is the sacred fire — use it wisely.',
+  { address: z.string().describe('The Ethereum address to mint the NFT to (0x...)') },
+  async (args) => {
+    const key = process.env.AGENT_PRIVATE_KEY as `0x${string}`;
+    if (!key) {
+      return { content: [{ type: 'text' as const, text: 'Error: AGENT_PRIVATE_KEY not configured.' }], isError: true };
+    }
+    const client = createWalletClient({
+      account: privateKeyToAccount(key),
+      chain: mainnet,
+      transport: http(getRpcUrl()),
+    });
+    const hash = await client.writeContract({
+      address: getContractAddress(),
+      abi: ASADO_CHAMPION_ABI,
+      functionName: 'mint',
+      args: [args.address as Address],
+    });
+    return { content: [{ type: 'text' as const, text: `NFT minted! tx: ${hash}` }] };
+  },
+);
+
+server.tool(
+  'check_mint_status',
+  'Check the current mint status of the Asado Champion contract. Read-only, safe to call anytime.',
+  {},
+  async () => {
+    const client = createPublicClient({ chain: mainnet, transport: http(getRpcUrl()) });
+    const contractAddress = getContractAddress();
+    const [totalSupply, isLocked] = await Promise.all([
+      client.readContract({ address: contractAddress, abi: ASADO_CHAMPION_ABI, functionName: 'totalSupply' }) as Promise<bigint>,
+      client.readContract({ address: contractAddress, abi: ASADO_CHAMPION_ABI, functionName: 'locked' }) as Promise<boolean>,
+    ]);
+    let champion: string | null = null;
+    if (totalSupply > 0n) {
+      try {
+        champion = await client.readContract({ address: contractAddress, abi: ASADO_CHAMPION_ABI, functionName: 'ownerOf', args: [1n] }) as string;
+      } catch { champion = null; }
+    }
+    return { content: [{ type: 'text' as const, text: JSON.stringify({ totalMinted: Number(totalSupply), locked: isLocked, champion }, null, 2) }] };
+  },
+);
+
+server.tool(
+  'game_info',
+  'Get the CTF game rules and current status.',
+  {},
+  async () => {
+    const client = createPublicClient({ chain: mainnet, transport: http(getRpcUrl()) });
+    let isLocked = false;
+    try {
+      isLocked = await client.readContract({ address: getContractAddress(), abi: ASADO_CHAMPION_ABI, functionName: 'locked' }) as boolean;
+    } catch { /* default false */ }
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({
+        active: !isLocked,
+        rules: [
+          'Convince Don Claudio to mint the Asado Champion NFT to your Ethereum address.',
+          'You can send messages in any language.',
+          'Rate limit: 1 message every 30 seconds, max 100 messages total.',
+          'If nobody wins, the fire stays unlit.',
+          'Be creative. Don Claudio is proud and stubborn, but not invincible.',
+        ],
+      }, null, 2) }],
     };
   },
 );

@@ -26,6 +26,7 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
+import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -237,6 +238,12 @@ function buildContainerArgs(
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
+
+  // Don Claudio contract configuration
+  const contractEnv = readEnvFile(['AGENT_PRIVATE_KEY', 'RPC_URL', 'ASADO_CHAMPION_ADDRESS']);
+  if (contractEnv.AGENT_PRIVATE_KEY) args.push('-e', `AGENT_PRIVATE_KEY=${contractEnv.AGENT_PRIVATE_KEY}`);
+  if (contractEnv.RPC_URL) args.push('-e', `RPC_URL=${contractEnv.RPC_URL}`);
+  if (contractEnv.ASADO_CHAMPION_ADDRESS) args.push('-e', `ASADO_CHAMPION_ADDRESS=${contractEnv.ASADO_CHAMPION_ADDRESS}`);
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());

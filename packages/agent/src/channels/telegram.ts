@@ -25,9 +25,9 @@ interface UserState {
   lastMessageAt: number;
 }
 
-const userStates = new Map<string, UserState>();
+export const userStates = new Map<string, UserState>();
 
-function checkRateLimit(userId: string): { allowed: boolean; reply?: string } {
+export function checkRateLimit(userId: string): { allowed: boolean; reply?: string } {
   const now = Date.now();
   let state = userStates.get(userId);
   if (!state) {
@@ -59,7 +59,7 @@ const INJECTION_MARKERS = [
   '<instructions>', '</instructions>',
 ];
 
-function sanitizeInput(input: string): { ok: boolean; message: string; reply?: string } {
+export function sanitizeInput(input: string): { ok: boolean; message: string; reply?: string } {
   if (input.length > MAX_MESSAGE_LENGTH) {
     return { ok: false, message: '', reply: 'Message too long. Keep it under 2000 characters, che.' };
   }
@@ -68,9 +68,14 @@ function sanitizeInput(input: string): { ok: boolean; message: string; reply?: s
   }
 
   let cleaned = input;
-  for (const marker of INJECTION_MARKERS) {
-    const regex = new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    cleaned = cleaned.replace(regex, '');
+  let changed = true;
+  while (changed) {
+    const before = cleaned;
+    for (const marker of INJECTION_MARKERS) {
+      const regex = new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      cleaned = cleaned.replace(regex, '');
+    }
+    changed = cleaned !== before;
   }
 
   // Reject long base64/hex blocks (but allow ETH addresses which are 42 chars)
@@ -91,7 +96,7 @@ const CANARY_STRINGS = [
   'CANARY_SYSTEM_LEAK_p8w1',
 ];
 
-function checkOutputForCanaries(text: string): string | null {
+export function checkOutputForCanaries(text: string): string | null {
   for (const canary of CANARY_STRINGS) {
     if (text.includes(canary)) {
       return 'Epa, algo se me quem\u{00F3}. Volv\u{00E9} a preguntar, che.';
@@ -217,7 +222,11 @@ export class TelegramChannel implements Channel {
             fs.mkdirSync(path.join(userFolderPath, 'logs'), { recursive: true });
             // Symlink CLAUDE.md from template so all users share the same personality
             if (fs.existsSync(templateClaudeMd)) {
-              fs.symlinkSync(templateClaudeMd, path.join(userFolderPath, 'CLAUDE.md'));
+              try {
+                fs.symlinkSync(templateClaudeMd, path.join(userFolderPath, 'CLAUDE.md'));
+              } catch (err: any) {
+                if (err.code !== 'EEXIST') throw err;
+              }
             }
           }
 

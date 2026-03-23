@@ -7,11 +7,13 @@ out/
 cache/
 broadcast/
 .vscode/
+.DS_Store
 
 # NanoClaw local data (packages/agent)
 packages/agent/store/
 packages/agent/data/
 packages/agent/logs/
+packages/agent/groups/dc-*/
 packages/agent/.nanoclaw/
 packages/agent/dist/
 packages/agent/node_modules/
